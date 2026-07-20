@@ -36,6 +36,9 @@ const Icon = ({ name, size = 18, color = "currentColor", stroke = 1.75, style = 
     case "box": return <svg {...props}><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg>;
     case "broom": return <svg {...props}><path d="M14 4l6 6M8 10l6 6-4 4a3 3 0 0 1-4-4zM14 10l-4 4M3 21l3-3"/></svg>;
     case "hammer": return <svg {...props}><path d="M14 4l6 6-3 3-6-6zM11 7L3 15l3 3 8-8M13 13l4 4"/></svg>;
+    case "chevronDown": return <svg {...props}><path d="M6 9l6 6 6-6"/></svg>;
+    case "x": return <svg {...props}><path d="M6 6l12 12M18 6L6 18"/></svg>;
+    case "list": return <svg {...props}><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>;
     default: return <svg {...props}><circle cx="12" cy="12" r="9"/></svg>;
   }
 };
@@ -141,6 +144,26 @@ const MEALS = [
   { time: "6:00 PM", label: "Optional Snack", suggestions: ["Cottage cheese + berries", "Casein shake", "Almonds + dark chocolate", "Cheese + crackers"] },
 ];
 
+// Preset staples pulled from the meal suggestions, grouped by store section.
+const SHOPPING_STAPLES = [
+  {
+    section: "Protein",
+    items: ["Chicken breast", "Chicken thighs", "Steak / steak tips", "Ground turkey", "Salmon", "Pork chops", "Pulled pork", "Canned tuna", "Eggs", "Beef jerky", "Greek yogurt", "Cottage cheese", "Protein powder", "Cheese sticks"],
+  },
+  {
+    section: "Produce",
+    items: ["Bananas", "Apples", "Berries", "Sweet potatoes", "Potatoes", "Asparagus", "Mixed veggies", "Salad greens", "Coleslaw mix"],
+  },
+  {
+    section: "Grains & Carbs",
+    items: ["White rice", "Brown rice", "Oats", "Bread", "Wraps / tortillas", "Crackers", "Granola"],
+  },
+  {
+    section: "Pantry & Extras",
+    items: ["Peanut butter", "Almonds", "Trail mix", "Dark chocolate", "Canned beans", "Olive oil", "Seasonings"],
+  },
+];
+
 const SUNDAY_RESET = [
   { id: "grocery", label: "Grocery shopping", icon: "cart" },
   { id: "laundry", label: "Laundry", icon: "basket" },
@@ -157,6 +180,15 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const getDateKey = (d = new Date()) => d.toISOString().split("T")[0];
 const getDayName = (d = new Date()) => ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getDay()];
+
+// Returns the date-key of the Sunday that starts the current week.
+// Used to detect when a new week begins so the shopping list can auto-reset.
+const getWeekKey = () => {
+  const now = new Date();
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - now.getDay());
+  return getDateKey(sunday);
+};
 
 const getWeekDates = () => {
   const now = new Date();
@@ -592,10 +624,177 @@ function FitnessTab({ workoutLog, setWorkoutLog, todayKey, bodyWeight, setBodyWe
 
 // ─── TAB: MEALS ─────────────────────────────────────────────────────────────
 
-function MealsTab() {
+function ShoppingList({ shopping, setShopping }) {
+  const [open, setOpen] = useState(false);
+  const [newItem, setNewItem] = useState("");
+  const checked = shopping.checked || {};
+  const custom = shopping.custom || [];
+
+  // Build the full section list, appending an Extras section if custom items exist.
+  const sections = custom.length
+    ? [...SHOPPING_STAPLES, { section: "Extras", items: custom, isCustom: true }]
+    : SHOPPING_STAPLES;
+
+  const allItems = sections.flatMap(s => s.items);
+  const totalChecked = allItems.filter(it => checked[it]).length;
+  const remaining = allItems.length - totalChecked;
+
+  const toggleItem = (item) => {
+    setShopping(prev => {
+      const updated = { ...prev, checked: { ...(prev.checked || {}), [item]: !(prev.checked || {})[item] } };
+      saveData("shopping", updated);
+      return updated;
+    });
+  };
+
+  const addCustom = () => {
+    const val = newItem.trim();
+    if (!val) return;
+    setShopping(prev => {
+      if ((prev.custom || []).includes(val)) return prev;
+      const updated = { ...prev, custom: [...(prev.custom || []), val] };
+      saveData("shopping", updated);
+      return updated;
+    });
+    setNewItem("");
+  };
+
+  const removeCustom = (item) => {
+    setShopping(prev => {
+      const nextChecked = { ...(prev.checked || {}) };
+      delete nextChecked[item];
+      const updated = { ...prev, custom: (prev.custom || []).filter(c => c !== item), checked: nextChecked };
+      saveData("shopping", updated);
+      return updated;
+    });
+  };
+
+  const clearChecked = () => {
+    setShopping(prev => {
+      const updated = { ...prev, checked: {} };
+      saveData("shopping", updated);
+      return updated;
+    });
+  };
+
+  return (
+    <div style={styles.card}>
+      {/* Header — tap to expand/collapse */}
+      <button onClick={() => setOpen(o => !o)} style={{
+        display: "flex", alignItems: "center", gap: 12, width: "100%",
+        background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left",
+      }}>
+        <IconTile name="cart" color="#dc2626" bg="rgba(220,38,38,0.1)" size={40} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, color: "rgba(255,255,255,0.5)" }}>Weekly Shopping List</div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>
+            {remaining > 0 ? `${remaining} item${remaining !== 1 ? "s" : ""} left to grab` : "All set — list complete"}
+          </div>
+        </div>
+        <Icon name="chevronDown" size={20} color="rgba(255,255,255,0.4)" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 16 }}>
+          {/* Progress bar */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>
+              <span>{totalChecked} of {allItems.length} in cart</span>
+              {totalChecked > 0 && (
+                <span onClick={clearChecked} style={{ color: "rgba(255,255,255,0.4)", cursor: "pointer", textDecoration: "underline" }}>Clear all</span>
+              )}
+            </div>
+            <div style={styles.progressTrack}>
+              <div style={{ ...styles.progressFill, width: `${allItems.length ? (totalChecked / allItems.length) * 100 : 0}%` }} />
+            </div>
+          </div>
+
+          {/* Sections */}
+          {sections.map((sec, si) => (
+            <div key={si} style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "#dc2626", marginBottom: 8 }}>{sec.section}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {sec.items.map((item, ii) => {
+                  const isChecked = !!checked[item];
+                  return (
+                    <div key={ii} style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      padding: "9px 12px", borderRadius: 9,
+                      background: isChecked ? "rgba(74,222,128,0.06)" : "rgba(255,255,255,0.03)",
+                      border: `1px solid ${isChecked ? "rgba(74,222,128,0.15)" : "rgba(255,255,255,0.05)"}`,
+                    }}>
+                      <button onClick={() => toggleItem(item)} style={{
+                        display: "flex", alignItems: "center", gap: 10, flex: 1,
+                        background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left",
+                      }}>
+                        <div style={{
+                          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          background: isChecked ? "#4ade80" : "rgba(255,255,255,0.08)",
+                          transition: "all 0.15s",
+                        }}>
+                          {isChecked && <Icon name="check" size={14} color="#000" stroke={3} />}
+                        </div>
+                        <span style={{
+                          fontSize: 13.5, fontWeight: 500,
+                          color: isChecked ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.85)",
+                          textDecoration: isChecked ? "line-through" : "none",
+                        }}>
+                          {item}
+                        </span>
+                      </button>
+                      {sec.isCustom && (
+                        <button onClick={() => removeCustom(item)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
+                          <Icon name="x" size={15} color="rgba(255,255,255,0.3)" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {/* Add custom item */}
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <input
+              value={newItem}
+              onChange={e => setNewItem(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") addCustom(); }}
+              placeholder="Add an item..."
+              style={{
+                flex: 1, padding: "10px 12px", borderRadius: 9,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: "#fff", fontSize: 13.5, outline: "none",
+                fontFamily: "inherit",
+              }}
+            />
+            <button onClick={addCustom} style={{
+              padding: "0 16px", borderRadius: 9, cursor: "pointer",
+              background: "rgba(220,38,38,0.15)", border: "1px solid rgba(220,38,38,0.3)",
+              color: "#dc2626", fontSize: 14, fontWeight: 700,
+              display: "flex", alignItems: "center", gap: 4,
+            }}>
+              <Icon name="plus" size={14} stroke={2.5} /> Add
+            </button>
+          </div>
+
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 12, textAlign: "center" }}>
+            Checkmarks reset automatically each Sunday. Your added items stay.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MealsTab({ shopping, setShopping }) {
   const now = getCurrentMinutes();
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <ShoppingList shopping={shopping} setShopping={setShopping} />
+
       <div style={styles.card}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <IconTile name="target" color="#dc2626" bg="rgba(220,38,38,0.1)" size={40} />
@@ -1001,14 +1200,26 @@ const TABS = [
   { id: "reset", label: "Reset", icon: "refresh" },
 ];
 
-export default function App() {
+export default function IronProtocol() {
   const todayKey = getDateKey();
   const [tab, setTab] = useState("home");
   const [habits, setHabits] = useState(() => loadData("habits", {}));
   const [workoutLog, setWorkoutLog] = useState(() => loadData("workoutLog", {}));
   const [bodyWeight, setBodyWeight] = useState(() => loadData("bodyWeight", {}));
   const [sundayChecklist, setSundayChecklist] = useState(() => loadData("sundayChecklist", {}));
+  const [shopping, setShopping] = useState(() => loadData("shopping", { weekKey: getWeekKey(), checked: {}, custom: [] }));
   const [overtime, setOvertime] = useState(0);
+
+  // Auto-reset the shopping list's checkmarks when a new week starts (custom items are kept).
+  useEffect(() => {
+    const currentWeek = getWeekKey();
+    if (shopping.weekKey !== currentWeek) {
+      const reset = { weekKey: currentWeek, checked: {}, custom: shopping.custom || [] };
+      setShopping(reset);
+      saveData("shopping", reset);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const streaks = useMemo(() => {
     const result = {};
@@ -1067,7 +1278,7 @@ export default function App() {
         {tab === "home" && <HomeTab habits={habits} todayKey={todayKey} />}
         {tab === "habits" && <HabitsTab habits={habits} setHabits={setHabits} todayKey={todayKey} streaks={streaks} />}
         {tab === "fitness" && <FitnessTab workoutLog={workoutLog} setWorkoutLog={setWorkoutLog} todayKey={todayKey} bodyWeight={bodyWeight} setBodyWeight={setBodyWeight} />}
-        {tab === "meals" && <MealsTab />}
+        {tab === "meals" && <MealsTab shopping={shopping} setShopping={setShopping} />}
         {tab === "schedule" && <ScheduleTab overtime={overtime} setOvertime={setOvertime} />}
         {tab === "progress" && <ProgressTab habits={habits} workoutLog={workoutLog} bodyWeight={bodyWeight} streaks={streaks} />}
         {tab === "reset" && <ResetTab sundayChecklist={sundayChecklist} setSundayChecklist={setSundayChecklist} setOvertime={setOvertime} />}
