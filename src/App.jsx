@@ -911,6 +911,13 @@ function ShoppingList({ shopping, setShopping }) {
 
 function MealsTab({ shopping, setShopping }) {
   const now = getCurrentMinutes();
+  const [showWeek, setShowWeek] = useState(false);
+
+  const dayName = getDayName();
+  // Rotation index anchored to Monday (Mon=0), so Monday's pre-work snack is the first option.
+  const rot = (new Date().getDay() + 6) % 7;
+  const dishFor = (meal, dayRot) => meal.suggestions[dayRot % meal.suggestions.length];
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <ShoppingList shopping={shopping} setShopping={setShopping} />
@@ -919,8 +926,8 @@ function MealsTab({ shopping, setShopping }) {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <IconTile name="target" color="#dc2626" bg="rgba(220,38,38,0.1)" size={40} />
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, color: "rgba(255,255,255,0.5)" }}>Protein Target</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>150–200g daily across all meals</div>
+            <div style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, color: "rgba(255,255,255,0.5)" }}>{dayName}'s Meals</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>150–200g protein · rotates daily</div>
           </div>
         </div>
       </div>
@@ -929,13 +936,14 @@ function MealsTab({ shopping, setShopping }) {
         const mealMin = timeToMinutes(meal.time);
         const isPast = mealMin < now;
         const isNext = !isPast && (i === 0 || timeToMinutes(MEALS[i-1].time) < now);
+        const dish = dishFor(meal, rot);
         return (
           <div key={i} style={{
             ...styles.card,
             border: isNext ? "1px solid rgba(220,38,38,0.3)" : "1px solid rgba(255,255,255,0.06)",
             opacity: isPast ? 0.4 : 1,
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <Icon name="utensils" size={16} color={isNext ? "#dc2626" : "rgba(255,255,255,0.5)"} />
                 <div>
@@ -949,16 +957,59 @@ function MealsTab({ shopping, setShopping }) {
                 </span>
               )}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {meal.suggestions.map((s, j) => (
-                <div key={j} style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", paddingLeft: 12, borderLeft: "2px solid rgba(255,255,255,0.06)" }}>
-                  {s}
-                </div>
-              ))}
+            {/* Single assigned dish for today */}
+            <div style={{
+              fontSize: 15, fontWeight: 600, color: "#fff",
+              padding: "12px 14px", borderRadius: 10,
+              background: "rgba(255,255,255,0.03)",
+              borderLeft: "3px solid #dc2626",
+            }}>
+              {dish}
             </div>
           </div>
         );
       })}
+
+      {/* Collapsible full-week rotation for planning / prep */}
+      <div style={styles.card}>
+        <button onClick={() => setShowWeek(s => !s)} style={{
+          display: "flex", alignItems: "center", gap: 12, width: "100%",
+          background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left",
+        }}>
+          <IconTile name="calendar" color="rgba(255,255,255,0.7)" bg="rgba(255,255,255,0.05)" size={40} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, color: "rgba(255,255,255,0.5)" }}>This Week's Rotation</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>See what's coming each day</div>
+          </div>
+          <Icon name="chevronDown" size={20} color="rgba(255,255,255,0.4)" style={{ transform: showWeek ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+        </button>
+
+        {showWeek && (
+          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+            {["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"].map((dName, dIdx) => {
+              const isToday = dName === dayName;
+              return (
+                <div key={dIdx}>
+                  <div style={{
+                    fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5,
+                    color: isToday ? "#dc2626" : "rgba(255,255,255,0.45)", marginBottom: 6,
+                  }}>
+                    {dName}{isToday ? " · Today" : ""}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {MEALS.map((meal, mIdx) => (
+                      <div key={mIdx} style={{ display: "flex", gap: 8, fontSize: 12.5 }}>
+                        <span style={{ color: "rgba(255,255,255,0.35)", width: 62, flexShrink: 0 }}>{meal.time.replace(":00","")}</span>
+                        <span style={{ color: "rgba(255,255,255,0.7)" }}>{dishFor(meal, dIdx)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
