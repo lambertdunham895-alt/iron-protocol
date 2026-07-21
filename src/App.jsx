@@ -144,25 +144,101 @@ const MEALS = [
   { time: "6:00 PM", label: "Optional Snack", suggestions: ["Cottage cheese + berries", "Casein shake", "Almonds + dark chocolate", "Cheese + crackers"] },
 ];
 
-// Preset staples pulled from the meal suggestions, grouped by store section.
+// Preset staples grouped by store section. Each has a rule for how much to buy:
+//  - kind "meat": scales in lbs with meals prepped (rounded up to 0.5 lb)
+//  - kind "count": scales as whole units (optional suffix like "cans")
+//  - kind "eggs": scales, displayed in dozens
+//  - kind "bag"/"pack": scales as whole bags/packs
+//  - fixed: a set amount that doesn't scale (jars, bottles — they last weeks)
 const SHOPPING_STAPLES = [
   {
     section: "Protein",
-    items: ["Chicken breast", "Chicken thighs", "Steak / steak tips", "Ground turkey", "Salmon", "Pork chops", "Pulled pork", "Canned tuna", "Eggs", "Beef jerky", "Greek yogurt", "Cottage cheese", "Protein powder", "Cheese sticks"],
+    items: [
+      { name: "Chicken breast", kind: "meat", perMeal: 0.18 },
+      { name: "Chicken thighs", kind: "meat", perMeal: 0.18 },
+      { name: "Steak / steak tips", kind: "meat", perMeal: 0.16 },
+      { name: "Ground turkey", kind: "meat", perMeal: 0.18 },
+      { name: "Salmon", kind: "meat", perMeal: 0.16 },
+      { name: "Pork chops", kind: "meat", perMeal: 0.16 },
+      { name: "Pulled pork", kind: "meat", perMeal: 0.18 },
+      { name: "Canned tuna", kind: "count", perMeal: 0.3, suffix: "cans" },
+      { name: "Eggs", kind: "eggs", perMeal: 0.6 },
+      { name: "Beef jerky", fixed: "1 bag" },
+      { name: "Greek yogurt", fixed: "1 large tub" },
+      { name: "Cottage cheese", fixed: "1 tub" },
+      { name: "Protein powder", fixed: "1 tub" },
+      { name: "Cheese sticks", fixed: "1 pack" },
+    ],
   },
   {
     section: "Produce",
-    items: ["Bananas", "Apples", "Berries", "Sweet potatoes", "Potatoes", "Asparagus", "Mixed veggies", "Salad greens", "Coleslaw mix"],
+    items: [
+      { name: "Bananas", kind: "count", perMeal: 0.4 },
+      { name: "Apples", kind: "count", perMeal: 0.3 },
+      { name: "Berries", kind: "pack", perMeal: 0.06 },
+      { name: "Sweet potatoes", kind: "count", perMeal: 0.3 },
+      { name: "Potatoes", fixed: "1 bag (5 lb)" },
+      { name: "Asparagus", kind: "pack", perMeal: 0.05 },
+      { name: "Mixed veggies", kind: "pack", perMeal: 0.09 },
+      { name: "Salad greens", kind: "pack", perMeal: 0.05 },
+      { name: "Coleslaw mix", kind: "pack", perMeal: 0.05 },
+    ],
   },
   {
     section: "Grains & Carbs",
-    items: ["White rice", "Brown rice", "Oats", "Bread", "Wraps / tortillas", "Crackers", "Granola"],
+    items: [
+      { name: "White rice", kind: "bag", perMeal: 0.05, bagLabel: "2 lb bag" },
+      { name: "Brown rice", kind: "bag", perMeal: 0.05, bagLabel: "2 lb bag" },
+      { name: "Oats", kind: "bag", perMeal: 0.05, bagLabel: "container" },
+      { name: "Bread", fixed: "1 loaf" },
+      { name: "Wraps / tortillas", fixed: "1 pack" },
+      { name: "Crackers", fixed: "1 box" },
+      { name: "Granola", fixed: "1 bag" },
+    ],
   },
   {
     section: "Pantry & Extras",
-    items: ["Peanut butter", "Almonds", "Trail mix", "Dark chocolate", "Canned beans", "Olive oil", "Seasonings"],
+    items: [
+      { name: "Peanut butter", fixed: "1 jar" },
+      { name: "Almonds", fixed: "1 bag" },
+      { name: "Trail mix", fixed: "1 bag" },
+      { name: "Dark chocolate", fixed: "1 bar" },
+      { name: "Canned beans", kind: "count", perMeal: 0.2, suffix: "cans" },
+      { name: "Olive oil", fixed: "1 bottle" },
+      { name: "Seasonings", fixed: "as needed" },
+    ],
   },
 ];
+
+// Turn a staple + meal count into a practical shopping amount.
+const qtyFor = (item, meals) => {
+  if (item.fixed) return item.fixed;
+  const raw = item.perMeal * meals;
+  switch (item.kind) {
+    case "meat": {
+      const lb = Math.max(0.5, Math.ceil(raw * 2) / 2); // round up to nearest 0.5 lb
+      return `${lb} lb`;
+    }
+    case "count": {
+      const n = Math.max(1, Math.ceil(raw));
+      return item.suffix ? `${n} ${item.suffix}` : `${n}`;
+    }
+    case "eggs": {
+      const doz = Math.max(1, Math.ceil(Math.ceil(raw) / 12));
+      return doz === 1 ? "1 dozen" : `${doz} dozen`;
+    }
+    case "bag": {
+      const bags = Math.max(1, Math.ceil(raw));
+      return bags === 1 ? `1 ${item.bagLabel}` : `${bags} × ${item.bagLabel}`;
+    }
+    case "pack": {
+      const packs = Math.max(1, Math.ceil(raw));
+      return packs === 1 ? "1 pack" : `${packs} packs`;
+    }
+    default:
+      return "";
+  }
+};
 
 const SUNDAY_RESET = [
   { id: "grocery", label: "Grocery shopping", icon: "cart" },
@@ -629,19 +705,29 @@ function ShoppingList({ shopping, setShopping }) {
   const [newItem, setNewItem] = useState("");
   const checked = shopping.checked || {};
   const custom = shopping.custom || [];
+  const meals = shopping.meals || 15;
 
-  // Build the full section list, appending an Extras section if custom items exist.
+  // Staple sections hold objects; append custom items (strings) as a normalized Extras section.
   const sections = custom.length
-    ? [...SHOPPING_STAPLES, { section: "Extras", items: custom, isCustom: true }]
+    ? [...SHOPPING_STAPLES, { section: "Extras", isCustom: true, items: custom.map(c => ({ name: c })) }]
     : SHOPPING_STAPLES;
 
-  const allItems = sections.flatMap(s => s.items);
-  const totalChecked = allItems.filter(it => checked[it]).length;
-  const remaining = allItems.length - totalChecked;
+  const allNames = sections.flatMap(s => s.items.map(it => it.name));
+  const totalChecked = allNames.filter(n => checked[n]).length;
+  const remaining = allNames.length - totalChecked;
 
-  const toggleItem = (item) => {
+  const setMeals = (val) => {
+    const clamped = Math.max(5, Math.min(30, val));
     setShopping(prev => {
-      const updated = { ...prev, checked: { ...(prev.checked || {}), [item]: !(prev.checked || {})[item] } };
+      const updated = { ...prev, meals: clamped };
+      saveData("shopping", updated);
+      return updated;
+    });
+  };
+
+  const toggleItem = (name) => {
+    setShopping(prev => {
+      const updated = { ...prev, checked: { ...(prev.checked || {}), [name]: !(prev.checked || {})[name] } };
       saveData("shopping", updated);
       return updated;
     });
@@ -659,11 +745,11 @@ function ShoppingList({ shopping, setShopping }) {
     setNewItem("");
   };
 
-  const removeCustom = (item) => {
+  const removeCustom = (name) => {
     setShopping(prev => {
       const nextChecked = { ...(prev.checked || {}) };
-      delete nextChecked[item];
-      const updated = { ...prev, custom: (prev.custom || []).filter(c => c !== item), checked: nextChecked };
+      delete nextChecked[name];
+      const updated = { ...prev, custom: (prev.custom || []).filter(c => c !== name), checked: nextChecked };
       saveData("shopping", updated);
       return updated;
     });
@@ -696,16 +782,37 @@ function ShoppingList({ shopping, setShopping }) {
 
       {open && (
         <div style={{ marginTop: 16 }}>
+          {/* Meals prepping control */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "12px 14px", borderRadius: 10, marginBottom: 16,
+            background: "rgba(220,38,38,0.05)", border: "1px solid rgba(220,38,38,0.12)",
+          }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Meals prepping</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 1 }}>Amounts scale to this</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button onClick={() => setMeals(meals - 5)} style={{ ...styles.smallBtn, width: 34, height: 34, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                <Icon name="minus" size={14} stroke={2.5} />
+              </button>
+              <span style={{ fontSize: 22, fontWeight: 800, color: "#dc2626", minWidth: 34, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{meals}</span>
+              <button onClick={() => setMeals(meals + 5)} style={{ ...styles.smallBtn, width: 34, height: 34, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                <Icon name="plus" size={14} stroke={2.5} />
+              </button>
+            </div>
+          </div>
+
           {/* Progress bar */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>
-              <span>{totalChecked} of {allItems.length} in cart</span>
+              <span>{totalChecked} of {allNames.length} in cart</span>
               {totalChecked > 0 && (
                 <span onClick={clearChecked} style={{ color: "rgba(255,255,255,0.4)", cursor: "pointer", textDecoration: "underline" }}>Clear all</span>
               )}
             </div>
             <div style={styles.progressTrack}>
-              <div style={{ ...styles.progressFill, width: `${allItems.length ? (totalChecked / allItems.length) * 100 : 0}%` }} />
+              <div style={{ ...styles.progressFill, width: `${allNames.length ? (totalChecked / allNames.length) * 100 : 0}%` }} />
             </div>
           </div>
 
@@ -715,7 +822,8 @@ function ShoppingList({ shopping, setShopping }) {
               <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "#dc2626", marginBottom: 8 }}>{sec.section}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {sec.items.map((item, ii) => {
-                  const isChecked = !!checked[item];
+                  const isChecked = !!checked[item.name];
+                  const qty = sec.isCustom ? null : qtyFor(item, meals);
                   return (
                     <div key={ii} style={{
                       display: "flex", alignItems: "center", gap: 10,
@@ -723,8 +831,8 @@ function ShoppingList({ shopping, setShopping }) {
                       background: isChecked ? "rgba(74,222,128,0.06)" : "rgba(255,255,255,0.03)",
                       border: `1px solid ${isChecked ? "rgba(74,222,128,0.15)" : "rgba(255,255,255,0.05)"}`,
                     }}>
-                      <button onClick={() => toggleItem(item)} style={{
-                        display: "flex", alignItems: "center", gap: 10, flex: 1,
+                      <button onClick={() => toggleItem(item.name)} style={{
+                        display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0,
                         background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left",
                       }}>
                         <div style={{
@@ -736,15 +844,27 @@ function ShoppingList({ shopping, setShopping }) {
                           {isChecked && <Icon name="check" size={14} color="#000" stroke={3} />}
                         </div>
                         <span style={{
-                          fontSize: 13.5, fontWeight: 500,
+                          fontSize: 13.5, fontWeight: 500, flex: 1, minWidth: 0,
                           color: isChecked ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.85)",
                           textDecoration: isChecked ? "line-through" : "none",
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                         }}>
-                          {item}
+                          {item.name}
                         </span>
                       </button>
+                      {qty && (
+                        <span style={{
+                          fontSize: 12, fontWeight: 700, flexShrink: 0,
+                          padding: "3px 9px", borderRadius: 6,
+                          background: isChecked ? "rgba(255,255,255,0.04)" : "rgba(220,38,38,0.1)",
+                          color: isChecked ? "rgba(255,255,255,0.3)" : "#f87171",
+                          fontVariantNumeric: "tabular-nums",
+                        }}>
+                          {qty}
+                        </span>
+                      )}
                       {sec.isCustom && (
-                        <button onClick={() => removeCustom(item)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
+                        <button onClick={() => removeCustom(item.name)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", flexShrink: 0 }}>
                           <Icon name="x" size={15} color="rgba(255,255,255,0.3)" />
                         </button>
                       )}
@@ -781,7 +901,7 @@ function ShoppingList({ shopping, setShopping }) {
           </div>
 
           <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 12, textAlign: "center" }}>
-            Checkmarks reset automatically each Sunday. Your added items stay.
+            Amounts are estimates — adjust "meals prepping" to fit your week. Checkmarks reset each Sunday; your added items stay.
           </div>
         </div>
       )}
@@ -1207,14 +1327,14 @@ export default function IronProtocol() {
   const [workoutLog, setWorkoutLog] = useState(() => loadData("workoutLog", {}));
   const [bodyWeight, setBodyWeight] = useState(() => loadData("bodyWeight", {}));
   const [sundayChecklist, setSundayChecklist] = useState(() => loadData("sundayChecklist", {}));
-  const [shopping, setShopping] = useState(() => loadData("shopping", { weekKey: getWeekKey(), checked: {}, custom: [] }));
+  const [shopping, setShopping] = useState(() => loadData("shopping", { weekKey: getWeekKey(), checked: {}, custom: [], meals: 15 }));
   const [overtime, setOvertime] = useState(0);
 
-  // Auto-reset the shopping list's checkmarks when a new week starts (custom items are kept).
+  // Auto-reset the shopping list's checkmarks when a new week starts (custom items and meal count are kept).
   useEffect(() => {
     const currentWeek = getWeekKey();
     if (shopping.weekKey !== currentWeek) {
-      const reset = { weekKey: currentWeek, checked: {}, custom: shopping.custom || [] };
+      const reset = { weekKey: currentWeek, checked: {}, custom: shopping.custom || [], meals: shopping.meals || 15 };
       setShopping(reset);
       saveData("shopping", reset);
     }
