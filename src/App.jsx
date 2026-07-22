@@ -63,20 +63,33 @@ const QUOTES = [
   "Build the body. Sharpen the mind. Forge the discipline.",
 ];
 
-const SCHEDULE = [
+// Eating days are Mon–Thu. Fri/Sat/Sun are fasting days (no meals).
+const EATING_DAYS = [1, 2, 3, 4];
+const isEatingDay = (d = new Date()) => EATING_DAYS.includes(d.getDay());
+
+// The daily routine, minus meals (meals are injected per day below).
+const BASE_SCHEDULE = [
   { time: "2:15 AM", label: "Wake Up", icon: "bolt", category: "routine" },
-  { time: "2:30 AM", label: "Pre-Work Snack", icon: "coffee", category: "meal" },
   { time: "3:00 AM", label: "Work Starts", icon: "hammer", category: "work" },
-  { time: "7:00 AM", label: "Meal 1", icon: "utensils", category: "meal" },
-  { time: "11:00 AM", label: "Meal 2", icon: "beef", category: "meal" },
   { time: "3:00 PM", label: "Work Ends", icon: "check", category: "work" },
-  { time: "4:00 PM", label: "Dinner", icon: "utensils", category: "meal" },
   { time: "4:30 PM", label: "Workout / Walk", icon: "dumbbell", category: "fitness" },
-  { time: "6:00 PM", label: "Optional Snack", icon: "coffee", category: "meal" },
   { time: "6:15 PM", label: "Prep Tomorrow", icon: "clipboard", category: "routine" },
   { time: "6:45 PM", label: "Wind Down", icon: "moon", category: "routine" },
   { time: "7:00 PM", label: "Sleep Target", icon: "bed", category: "sleep" },
 ];
+
+// Meal entries injected into the timeline on eating days.
+const SCHEDULE_MEALS = [
+  { time: "11:00 AM", label: "Meal 1", icon: "utensils", category: "meal" },
+  { time: "5:00 PM", label: "Meal 2", icon: "utensils", category: "meal" },
+];
+
+// Build the full timeline for a given day, sorted by time.
+const getSchedule = (d = new Date()) => {
+  const items = isEatingDay(d) ? [...BASE_SCHEDULE, ...SCHEDULE_MEALS] : [...BASE_SCHEDULE];
+  return items.slice().sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
+};
+
 
 const HABITS = [
   { id: "wake", label: "Wake on time", icon: "sun" },
@@ -136,38 +149,20 @@ const WORKOUTS = {
   },
 };
 
-// Each dish carries the grocery items it needs (names must match SHOPPING_STAPLES).
-// This lets the Meals tab build a plan from whatever's been checked off as bought.
+// Two meals a day on eating days (Mon–Thu). Each dish carries the grocery items
+// it needs (names must match SHOPPING_STAPLES) so the plan can build from what's bought.
 const MEALS = [
-  { time: "2:30 AM", label: "Pre-Work Snack", suggestions: [
-    { dish: "2 hard-boiled eggs + banana", needs: ["Eggs", "Bananas"] },
-    { dish: "Greek yogurt + berries + chia", needs: ["Greek yogurt", "Berries / raspberries", "Chia seeds"] },
-    { dish: "Protein shake + overnight oats", needs: ["Protein powder", "Oats"] },
-    { dish: "PB + apple slices + whole-grain toast", needs: ["Peanut butter", "Apples", "Whole-grain bread"] },
-  ]},
-  { time: "7:00 AM", label: "Meal 1", suggestions: [
+  { time: "11:00 AM", label: "Meal 1", suggestions: [
     { dish: "Chicken breast + brown rice + broccoli", needs: ["Chicken breast", "Brown rice", "Broccoli"] },
-    { dish: "Ground turkey + avocado wrap + salad", needs: ["Ground turkey", "Avocado", "Whole-grain wraps", "Salad greens"] },
-    { dish: "Tuna + whole-grain crackers + pear", needs: ["Canned tuna", "Whole-grain crackers", "Pears"] },
-    { dish: "Egg scramble + spinach + whole-grain toast", needs: ["Eggs", "Spinach", "Whole-grain bread"] },
-  ]},
-  { time: "11:00 AM", label: "Meal 2", suggestions: [
-    { dish: "Steak tips + sweet potato + green beans", needs: ["Steak / steak tips", "Sweet potatoes", "Green beans"] },
     { dish: "Ground turkey + quinoa bowl + peppers", needs: ["Ground turkey", "Quinoa", "Bell peppers"] },
+    { dish: "Steak tips + sweet potato + green beans", needs: ["Steak / steak tips", "Sweet potatoes", "Green beans"] },
     { dish: "Salmon + brown rice + broccoli", needs: ["Salmon", "Brown rice", "Broccoli"] },
-    { dish: "Pulled pork + coleslaw + apple", needs: ["Pulled pork", "Coleslaw mix", "Apples"] },
   ]},
-  { time: "4:00 PM", label: "Dinner", suggestions: [
+  { time: "5:00 PM", label: "Meal 2", suggestions: [
     { dish: "Grilled chicken thighs + roasted potatoes + Brussels sprouts", needs: ["Chicken thighs", "Potatoes", "Brussels sprouts"] },
     { dish: "Beef stir fry + brown rice + mixed veggies", needs: ["Steak / steak tips", "Brown rice", "Mixed veggies"] },
     { dish: "Baked salmon + asparagus + quinoa", needs: ["Salmon", "Asparagus", "Quinoa"] },
     { dish: "Pork chops + sweet potato mash + green beans", needs: ["Pork chops", "Sweet potatoes", "Green beans"] },
-  ]},
-  { time: "6:00 PM", label: "Optional Snack", suggestions: [
-    { dish: "Cottage cheese + raspberries", needs: ["Cottage cheese", "Berries / raspberries"] },
-    { dish: "Casein shake + handful of almonds", needs: ["Protein powder", "Almonds"] },
-    { dish: "Apple + peanut butter", needs: ["Apples", "Peanut butter"] },
-    { dish: "Hummus + carrots + whole-grain crackers", needs: ["Hummus", "Carrots", "Whole-grain crackers"] },
   ]},
 ];
 
@@ -181,64 +176,37 @@ const SHOPPING_STAPLES = [
   {
     section: "Protein",
     items: [
-      { name: "Chicken breast", kind: "meat", perMeal: 0.18 },
-      { name: "Chicken thighs", kind: "meat", perMeal: 0.18 },
-      { name: "Steak / steak tips", kind: "meat", perMeal: 0.16 },
-      { name: "Ground turkey", kind: "meat", perMeal: 0.18 },
-      { name: "Salmon", kind: "meat", perMeal: 0.16 },
-      { name: "Pork chops", kind: "meat", perMeal: 0.16 },
-      { name: "Pulled pork", kind: "meat", perMeal: 0.18 },
-      { name: "Canned tuna", kind: "count", perMeal: 0.3, suffix: "cans" },
-      { name: "Eggs", kind: "eggs", perMeal: 0.6 },
-      { name: "Beef jerky", fixed: "1 bag" },
-      { name: "Greek yogurt", fixed: "1 large tub" },
-      { name: "Cottage cheese", fixed: "1 tub" },
-      { name: "Protein powder", fixed: "1 tub" },
-      { name: "Cheese sticks", fixed: "1 pack" },
+      { name: "Chicken breast", kind: "meat", perMeal: 0.35 },
+      { name: "Chicken thighs", kind: "meat", perMeal: 0.35 },
+      { name: "Steak / steak tips", kind: "meat", perMeal: 0.32 },
+      { name: "Ground turkey", kind: "meat", perMeal: 0.35 },
+      { name: "Salmon", kind: "meat", perMeal: 0.32 },
+      { name: "Pork chops", kind: "meat", perMeal: 0.32 },
     ],
   },
   {
     section: "Produce",
     items: [
-      { name: "Bananas", kind: "count", perMeal: 0.4 },
-      { name: "Apples", kind: "count", perMeal: 0.3 },
-      { name: "Pears", kind: "count", perMeal: 0.2 },
-      { name: "Berries / raspberries", kind: "pack", perMeal: 0.06 },
-      { name: "Avocado", kind: "count", perMeal: 0.15 },
-      { name: "Broccoli", kind: "pack", perMeal: 0.07 },
-      { name: "Brussels sprouts", kind: "pack", perMeal: 0.05 },
-      { name: "Green beans", kind: "pack", perMeal: 0.05 },
-      { name: "Bell peppers", kind: "count", perMeal: 0.2 },
-      { name: "Sweet potatoes", kind: "count", perMeal: 0.3 },
+      { name: "Broccoli", kind: "pack", perMeal: 0.14 },
+      { name: "Brussels sprouts", kind: "pack", perMeal: 0.1 },
+      { name: "Green beans", kind: "pack", perMeal: 0.1 },
+      { name: "Bell peppers", kind: "count", perMeal: 0.4 },
+      { name: "Mixed veggies", kind: "pack", perMeal: 0.18 },
+      { name: "Asparagus", kind: "pack", perMeal: 0.1 },
+      { name: "Sweet potatoes", kind: "count", perMeal: 0.6 },
       { name: "Potatoes", fixed: "1 bag (5 lb)" },
-      { name: "Carrots", fixed: "1 bag" },
-      { name: "Asparagus", kind: "pack", perMeal: 0.05 },
-      { name: "Mixed veggies", kind: "pack", perMeal: 0.09 },
-      { name: "Spinach", kind: "pack", perMeal: 0.05 },
-      { name: "Salad greens", kind: "pack", perMeal: 0.05 },
-      { name: "Coleslaw mix", kind: "pack", perMeal: 0.05 },
     ],
   },
   {
     section: "Grains & Carbs",
     items: [
-      { name: "Brown rice", kind: "bag", perMeal: 0.05, bagLabel: "2 lb bag" },
-      { name: "Quinoa", kind: "bag", perMeal: 0.05, bagLabel: "bag" },
-      { name: "Oats", kind: "bag", perMeal: 0.05, bagLabel: "container" },
-      { name: "Whole-grain bread", fixed: "1 loaf" },
-      { name: "Whole-grain wraps", fixed: "1 pack" },
-      { name: "Whole-grain crackers", fixed: "1 box" },
+      { name: "Brown rice", kind: "bag", perMeal: 0.1, bagLabel: "2 lb bag" },
+      { name: "Quinoa", kind: "bag", perMeal: 0.1, bagLabel: "bag" },
     ],
   },
   {
     section: "Pantry & Extras",
     items: [
-      { name: "Peanut butter", fixed: "1 jar" },
-      { name: "Hummus", fixed: "1 tub" },
-      { name: "Almonds", fixed: "1 bag" },
-      { name: "Chia seeds", fixed: "1 bag" },
-      { name: "Trail mix", fixed: "1 bag" },
-      { name: "Dark chocolate", fixed: "1 bar" },
       { name: "Olive oil", fixed: "1 bottle" },
       { name: "Seasonings", fixed: "as needed" },
     ],
@@ -394,6 +362,8 @@ function HomeTab({ habits, todayKey }) {
 
   const quote = useMemo(() => QUOTES[Math.floor(Math.random() * QUOTES.length)], [todayKey]);
   const dayName = getDayName();
+  const fasting = !isEatingDay();
+  const SCHEDULE = useMemo(() => getSchedule(new Date()), [todayKey]);
   const todayHabits = habits[todayKey] || {};
   const habitsDone = HABITS.filter(h => todayHabits[h.id]).length;
   const habitPct = Math.round((habitsDone / HABITS.length) * 100);
@@ -416,7 +386,14 @@ function HomeTab({ habits, todayKey }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>{dayName}</div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>{new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2, display: "flex", alignItems: "center", gap: 8 }}>
+              {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+              {fasting && (
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", padding: "2px 8px", borderRadius: 20, background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}>
+                  Fasting
+                </span>
+              )}
+            </div>
           </div>
           <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <ProgressRing pct={habitPct} size={64} stroke={5} />
@@ -740,7 +717,7 @@ function ShoppingList({ shopping, setShopping }) {
   const [newItem, setNewItem] = useState("");
   const checked = shopping.checked || {};
   const custom = shopping.custom || [];
-  const meals = shopping.meals || 15;
+  const meals = shopping.meals || 8;
 
   // Staple sections hold objects; append custom items (strings) as a normalized Extras section.
   const sections = custom.length
@@ -752,7 +729,8 @@ function ShoppingList({ shopping, setShopping }) {
   const remaining = allNames.length - totalChecked;
 
   const setMeals = (val) => {
-    const clamped = Math.max(5, Math.min(30, val));
+    // Snap to the nearest even number (2 meals/day) and clamp to range.
+    const clamped = Math.max(2, Math.min(24, Math.round(val / 2) * 2));
     setShopping(prev => {
       const updated = { ...prev, meals: clamped };
       saveData("shopping", updated);
@@ -828,11 +806,11 @@ function ShoppingList({ shopping, setShopping }) {
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 1 }}>Amounts scale to this</div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <button onClick={() => setMeals(meals - 5)} style={{ ...styles.smallBtn, width: 34, height: 34, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+              <button onClick={() => setMeals(meals - 2)} style={{ ...styles.smallBtn, width: 34, height: 34, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
                 <Icon name="minus" size={14} stroke={2.5} />
               </button>
               <span style={{ fontSize: 22, fontWeight: 800, color: "#dc2626", minWidth: 34, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{meals}</span>
-              <button onClick={() => setMeals(meals + 5)} style={{ ...styles.smallBtn, width: 34, height: 34, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+              <button onClick={() => setMeals(meals + 2)} style={{ ...styles.smallBtn, width: 34, height: 34, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
                 <Icon name="plus" size={14} stroke={2.5} />
               </button>
             </div>
@@ -950,7 +928,8 @@ function MealsTab({ shopping, setShopping, mealMode, setMealMode }) {
   const checked = shopping.checked || {};
 
   const dayName = getDayName();
-  // Rotation index anchored to Monday (Mon=0), so Monday's pre-work snack is the first option.
+  const fasting = !isEatingDay();
+  // Rotation index for eating days: Mon=0, Tue=1, Wed=2, Thu=3 (each dish shows once).
   const rot = (new Date().getDay() + 6) % 7;
 
   // Which dishes for a meal are makeable from what's been checked off as bought.
@@ -967,106 +946,122 @@ function MealsTab({ shopping, setShopping, mealMode, setMealMode }) {
 
   // In groceries mode, how many slots today actually have something makeable.
   const groceriesReady = MEALS.filter(m => availableFor(m).length > 0).length;
-  const showEmptyHint = mealMode === "groceries" && groceriesReady === 0;
+  const showEmptyHint = !fasting && mealMode === "groceries" && groceriesReady === 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <ShoppingList shopping={shopping} setShopping={setShopping} />
 
-      {/* Mode toggle */}
-      <div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-        {[
-          { id: "standard", label: "Standard Rotation" },
-          { id: "groceries", label: "From My Groceries" },
-        ].map(m => {
-          const active = mealMode === m.id;
-          return (
-            <button key={m.id} onClick={() => setMealMode(m.id)} style={{
-              flex: 1, padding: "10px 8px", borderRadius: 9, cursor: "pointer", border: "none",
-              background: active ? "rgba(220,38,38,0.15)" : "transparent",
-              color: active ? "#dc2626" : "rgba(255,255,255,0.45)",
-              fontSize: 12.5, fontWeight: 700, letterSpacing: 0.3,
-              transition: "all 0.15s",
-            }}>
-              {m.label}
-            </button>
-          );
-        })}
-      </div>
-
-      <div style={styles.card}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <IconTile name="target" color="#dc2626" bg="rgba(220,38,38,0.1)" size={40} />
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, color: "rgba(255,255,255,0.5)" }}>{dayName}'s Meals</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>
-              {mealMode === "groceries" ? "Built from what you bought" : "150–200g protein · rotates daily"}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Empty hint when nothing's checked in groceries mode */}
-      {showEmptyHint && (
-        <div style={{ ...styles.card, border: "1px solid rgba(245,158,11,0.25)", background: "rgba(245,158,11,0.05)", textAlign: "center" }}>
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
-            <IconTile name="cart" color="#f59e0b" bg="rgba(245,158,11,0.12)" size={44} />
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", marginBottom: 4 }}>Nothing checked off yet</div>
-          <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.5)", lineHeight: 1.5 }}>
-            Open the shopping list above and check off what you bought. Your week's meals build from there.
-          </div>
+      {/* Mode toggle — only relevant on eating days */}
+      {!fasting && (
+        <div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+          {[
+            { id: "standard", label: "Standard Rotation" },
+            { id: "groceries", label: "From My Groceries" },
+          ].map(m => {
+            const active = mealMode === m.id;
+            return (
+              <button key={m.id} onClick={() => setMealMode(m.id)} style={{
+                flex: 1, padding: "10px 8px", borderRadius: 9, cursor: "pointer", border: "none",
+                background: active ? "rgba(220,38,38,0.15)" : "transparent",
+                color: active ? "#dc2626" : "rgba(255,255,255,0.45)",
+                fontSize: 12.5, fontWeight: 700, letterSpacing: 0.3,
+                transition: "all 0.15s",
+              }}>
+                {m.label}
+              </button>
+            );
+          })}
         </div>
       )}
 
-      {MEALS.map((meal, i) => {
-        const mealMin = timeToMinutes(meal.time);
-        const isPast = mealMin < now;
-        const isNext = !isPast && (i === 0 || timeToMinutes(MEALS[i-1].time) < now);
-        const dish = dishForDay(meal, rot);
-        return (
-          <div key={i} style={{
-            ...styles.card,
-            border: isNext ? "1px solid rgba(220,38,38,0.3)" : "1px solid rgba(255,255,255,0.06)",
-            opacity: isPast ? 0.4 : 1,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <Icon name="utensils" size={16} color={isNext ? "#dc2626" : "rgba(255,255,255,0.5)"} />
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: isNext ? "#dc2626" : "#fff" }}>{meal.label}</div>
-                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>{meal.time}</div>
+      {/* Fasting day hero */}
+      {fasting ? (
+        <div style={{ ...styles.card, border: "1px solid rgba(139,92,246,0.25)", background: "rgba(139,92,246,0.06)", textAlign: "center", padding: 28 }}>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+            <IconTile name="moon" color="#a78bfa" bg="rgba(139,92,246,0.14)" size={52} />
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 6 }}>Fasting Day</div>
+          <div style={{ fontSize: 13.5, color: "rgba(255,255,255,0.55)", lineHeight: 1.6, maxWidth: 320, margin: "0 auto" }}>
+            No meals today — stay hydrated, keep your electrolytes up, and let the body reset. Next meal is <strong style={{ color: "#a78bfa" }}>Monday, 11:00 AM</strong>.
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={styles.card}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <IconTile name="target" color="#dc2626" bg="rgba(220,38,38,0.1)" size={40} />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, color: "rgba(255,255,255,0.5)" }}>{dayName}'s Meals</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>
+                  {mealMode === "groceries" ? "Built from what you bought" : "Two meals · 11 AM & 5 PM"}
                 </div>
               </div>
-              {isNext && (
-                <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 20, background: "rgba(220,38,38,0.15)", color: "#dc2626", fontWeight: 600 }}>
-                  Next Meal
-                </span>
-              )}
             </div>
-            {/* Single assigned dish, or a prompt if nothing's makeable in groceries mode */}
-            {dish ? (
-              <div style={{
-                fontSize: 15, fontWeight: 600, color: "#fff",
-                padding: "12px 14px", borderRadius: 10,
-                background: "rgba(255,255,255,0.03)",
-                borderLeft: "3px solid #dc2626",
-              }}>
-                {dish}
-              </div>
-            ) : (
-              <div style={{
-                fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.4)",
-                padding: "12px 14px", borderRadius: 10,
-                background: "rgba(255,255,255,0.02)",
-                borderLeft: "3px solid rgba(255,255,255,0.1)",
-              }}>
-                Check off this meal's ingredients to fill this slot
-              </div>
-            )}
           </div>
-        );
-      })}
+
+          {/* Empty hint when nothing's checked in groceries mode */}
+          {showEmptyHint && (
+            <div style={{ ...styles.card, border: "1px solid rgba(245,158,11,0.25)", background: "rgba(245,158,11,0.05)", textAlign: "center" }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
+                <IconTile name="cart" color="#f59e0b" bg="rgba(245,158,11,0.12)" size={44} />
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", marginBottom: 4 }}>Nothing checked off yet</div>
+              <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.5)", lineHeight: 1.5 }}>
+                Open the shopping list above and check off what you bought. Your week's meals build from there.
+              </div>
+            </div>
+          )}
+
+          {MEALS.map((meal, i) => {
+            const mealMin = timeToMinutes(meal.time);
+            const isPast = mealMin < now;
+            const isNext = !isPast && (i === 0 || timeToMinutes(MEALS[i-1].time) < now);
+            const dish = dishForDay(meal, rot);
+            return (
+              <div key={i} style={{
+                ...styles.card,
+                border: isNext ? "1px solid rgba(220,38,38,0.3)" : "1px solid rgba(255,255,255,0.06)",
+                opacity: isPast ? 0.4 : 1,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Icon name="utensils" size={16} color={isNext ? "#dc2626" : "rgba(255,255,255,0.5)"} />
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: isNext ? "#dc2626" : "#fff" }}>{meal.label}</div>
+                      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>{meal.time}</div>
+                    </div>
+                  </div>
+                  {isNext && (
+                    <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 20, background: "rgba(220,38,38,0.15)", color: "#dc2626", fontWeight: 600 }}>
+                      Next Meal
+                    </span>
+                  )}
+                </div>
+                {dish ? (
+                  <div style={{
+                    fontSize: 15, fontWeight: 600, color: "#fff",
+                    padding: "12px 14px", borderRadius: 10,
+                    background: "rgba(255,255,255,0.03)",
+                    borderLeft: "3px solid #dc2626",
+                  }}>
+                    {dish}
+                  </div>
+                ) : (
+                  <div style={{
+                    fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.4)",
+                    padding: "12px 14px", borderRadius: 10,
+                    background: "rgba(255,255,255,0.02)",
+                    borderLeft: "3px solid rgba(255,255,255,0.1)",
+                  }}>
+                    Check off this meal's ingredients to fill this slot
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </>
+      )}
 
       {/* Collapsible full-week rotation for planning / prep */}
       <div style={styles.card}>
@@ -1086,14 +1081,22 @@ function MealsTab({ shopping, setShopping, mealMode, setMealMode }) {
           <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
             {["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"].map((dName, dIdx) => {
               const isToday = dName === dayName;
+              const dayIsFasting = dIdx >= 4; // Fri, Sat, Sun
               return (
                 <div key={dIdx}>
                   <div style={{
                     fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5,
                     color: isToday ? "#dc2626" : "rgba(255,255,255,0.45)", marginBottom: 6,
+                    display: "flex", alignItems: "center", gap: 8,
                   }}>
                     {dName}{isToday ? " · Today" : ""}
+                    {dayIsFasting && (
+                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1, padding: "1px 7px", borderRadius: 20, background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}>Fasting</span>
+                    )}
                   </div>
+                  {dayIsFasting ? (
+                    <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.3)", fontStyle: "italic", paddingLeft: 2 }}>No meals — fasting</div>
+                  ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     {MEALS.map((meal, mIdx) => {
                       const d = dishForDay(meal, dIdx);
@@ -1105,6 +1108,7 @@ function MealsTab({ shopping, setShopping, mealMode, setMealMode }) {
                       );
                     })}
                   </div>
+                  )}
                 </div>
               );
             })}
@@ -1119,6 +1123,8 @@ function MealsTab({ shopping, setShopping, mealMode, setMealMode }) {
 
 function ScheduleTab({ overtime, setOvertime }) {
   const adjustMin = overtime * 60;
+  const fasting = !isEatingDay();
+  const SCHEDULE = getSchedule(new Date());
 
   const adjustedSchedule = SCHEDULE.map(item => {
     const min = timeToMinutes(item.time);
@@ -1164,7 +1170,14 @@ function ScheduleTab({ overtime, setOvertime }) {
       </div>
 
       <div style={styles.card}>
-        <div style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, color: "rgba(255,255,255,0.5)", marginBottom: 16 }}>Full Day Schedule</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, color: "rgba(255,255,255,0.5)" }}>Full Day Schedule</div>
+          {fasting && (
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", padding: "3px 9px", borderRadius: 20, background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}>
+              Fasting Day
+            </span>
+          )}
+        </div>
         {adjustedSchedule.map((item, i) => {
           const catColors = { routine: "#8b5cf6", meal: "#f59e0b", work: "#3b82f6", fitness: "#dc2626", sleep: "#6366f1" };
           const color = catColors[item.category] || "#666";
@@ -1479,7 +1492,7 @@ export default function IronProtocol() {
   const [workoutLog, setWorkoutLog] = useState(() => loadData("workoutLog", {}));
   const [bodyWeight, setBodyWeight] = useState(() => loadData("bodyWeight", {}));
   const [sundayChecklist, setSundayChecklist] = useState(() => loadData("sundayChecklist", {}));
-  const [shopping, setShopping] = useState(() => loadData("shopping", { weekKey: getWeekKey(), checked: {}, custom: [], meals: 15 }));
+  const [shopping, setShopping] = useState(() => loadData("shopping", { weekKey: getWeekKey(), checked: {}, custom: [], meals: 8 }));
   const [mealMode, setMealMode] = useState(() => loadData("mealMode", "standard"));
   const [overtime, setOvertime] = useState(0);
 
@@ -1488,13 +1501,27 @@ export default function IronProtocol() {
     saveData("mealMode", mode);
   };
 
-  // Auto-reset the shopping list's checkmarks when a new week starts (custom items and meal count are kept).
+  // On mount: reset the shopping checkmarks if it's a new week, and make sure the
+  // meal count is an even number in range (older saved values may be odd, e.g. 15).
   useEffect(() => {
     const currentWeek = getWeekKey();
+    let next = shopping;
+    let changed = false;
+
     if (shopping.weekKey !== currentWeek) {
-      const reset = { weekKey: currentWeek, checked: {}, custom: shopping.custom || [], meals: shopping.meals || 15 };
-      setShopping(reset);
-      saveData("shopping", reset);
+      next = { weekKey: currentWeek, checked: {}, custom: shopping.custom || [], meals: shopping.meals || 8 };
+      changed = true;
+    }
+
+    const evenMeals = Math.max(2, Math.min(24, Math.round((next.meals || 8) / 2) * 2));
+    if (evenMeals !== next.meals) {
+      next = { ...next, meals: evenMeals };
+      changed = true;
+    }
+
+    if (changed) {
+      setShopping(next);
+      saveData("shopping", next);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
