@@ -172,75 +172,69 @@ const MEALS = [
 //  - kind "eggs": scales, displayed in dozens
 //  - kind "bag"/"pack": scales as whole bags/packs
 //  - fixed: a set amount that doesn't scale (jars, bottles — they last weeks)
-const SHOPPING_STAPLES = [
-  {
-    section: "Protein",
-    items: [
-      { name: "Chicken breast", kind: "meat", perMeal: 0.35 },
-      { name: "Chicken thighs", kind: "meat", perMeal: 0.35 },
-      { name: "Steak / steak tips", kind: "meat", perMeal: 0.32 },
-      { name: "Ground turkey", kind: "meat", perMeal: 0.35 },
-      { name: "Salmon", kind: "meat", perMeal: 0.32 },
-      { name: "Pork chops", kind: "meat", perMeal: 0.32 },
-    ],
-  },
-  {
-    section: "Produce",
-    items: [
-      { name: "Broccoli", kind: "pack", perMeal: 0.14 },
-      { name: "Brussels sprouts", kind: "pack", perMeal: 0.1 },
-      { name: "Green beans", kind: "pack", perMeal: 0.1 },
-      { name: "Bell peppers", kind: "count", perMeal: 0.4 },
-      { name: "Mixed veggies", kind: "pack", perMeal: 0.18 },
-      { name: "Asparagus", kind: "pack", perMeal: 0.1 },
-      { name: "Sweet potatoes", kind: "count", perMeal: 0.6 },
-      { name: "Potatoes", fixed: "1 bag (5 lb)" },
-    ],
-  },
-  {
-    section: "Grains & Carbs",
-    items: [
-      { name: "Brown rice", kind: "bag", perMeal: 0.1, bagLabel: "2 lb bag" },
-      { name: "Quinoa", kind: "bag", perMeal: 0.1, bagLabel: "bag" },
-    ],
-  },
-  {
-    section: "Pantry & Extras",
-    items: [
-      { name: "Olive oil", fixed: "1 bottle" },
-      { name: "Seasonings", fixed: "as needed" },
-    ],
-  },
+// Per-ingredient metadata: which store section it belongs to and how to size it.
+// Quantities are driven by how many times an ingredient appears in the week's meal
+// plan (see planNeeds below) — so you buy exactly enough, not a full week of each.
+const INGREDIENT_META = {
+  // Protein — ~0.4 lb per serving, rounded up to the nearest 0.5 lb.
+  "Chicken breast":     { section: "Protein", kind: "meat" },
+  "Chicken thighs":     { section: "Protein", kind: "meat" },
+  "Steak / steak tips": { section: "Protein", kind: "meat" },
+  "Ground turkey":      { section: "Protein", kind: "meat" },
+  "Salmon":             { section: "Protein", kind: "meat" },
+  "Pork chops":         { section: "Protein", kind: "meat" },
+  // Produce
+  "Broccoli":           { section: "Produce", kind: "vegbag" },
+  "Brussels sprouts":   { section: "Produce", kind: "vegbag" },
+  "Green beans":        { section: "Produce", kind: "vegbag" },
+  "Asparagus":          { section: "Produce", kind: "vegbag" },
+  "Mixed veggies":      { section: "Produce", kind: "vegbag" },
+  "Bell peppers":       { section: "Produce", kind: "count", unit: "" },
+  "Sweet potatoes":     { section: "Produce", kind: "count", unit: "" },
+  "Potatoes":           { section: "Produce", kind: "fixed", fixed: "1 bag (5 lb)" },
+  // Grains — one bag covers the week.
+  "Brown rice":         { section: "Grains & Carbs", kind: "fixed", fixed: "1 bag" },
+  "Quinoa":             { section: "Grains & Carbs", kind: "fixed", fixed: "1 bag" },
+};
+
+// Cooking staples that are always on the list regardless of the plan.
+const ALWAYS_ITEMS = [
+  { name: "Olive oil", section: "Pantry & Extras", qty: "1 bottle" },
+  { name: "Seasonings", section: "Pantry & Extras", qty: "as needed" },
 ];
 
-// Turn a staple + meal count into a practical shopping amount.
-const qtyFor = (item, meals) => {
-  if (item.fixed) return item.fixed;
-  const raw = item.perMeal * meals;
-  switch (item.kind) {
-    case "meat": {
-      const lb = Math.max(0.5, Math.ceil(raw * 2) / 2); // round up to nearest 0.5 lb
-      return `${lb} lb`;
+const SECTION_ORDER = ["Protein", "Produce", "Grains & Carbs", "Pantry & Extras"];
+
+// Count how many times each ingredient appears across the week's 8 meals
+// (2 meals × Mon–Thu, standard rotation). This is fixed week to week.
+const planNeeds = () => {
+  const tally = {};
+  MEALS.forEach(meal => {
+    for (let day = 0; day < 4; day++) { // Mon–Thu
+      const dish = meal.suggestions[day % meal.suggestions.length];
+      dish.needs.forEach(n => { tally[n] = (tally[n] || 0) + 1; });
     }
-    case "count": {
-      const n = Math.max(1, Math.ceil(raw));
-      return item.suffix ? `${n} ${item.suffix}` : `${n}`;
-    }
-    case "eggs": {
-      const doz = Math.max(1, Math.ceil(Math.ceil(raw) / 12));
-      return doz === 1 ? "1 dozen" : `${doz} dozen`;
-    }
-    case "bag": {
-      const bags = Math.max(1, Math.ceil(raw));
-      return bags === 1 ? `1 ${item.bagLabel}` : `${bags} × ${item.bagLabel}`;
-    }
-    case "pack": {
-      const packs = Math.max(1, Math.ceil(raw));
-      return packs === 1 ? "1 pack" : `${packs} packs`;
-    }
-    default:
-      return "";
+  });
+  return tally;
+};
+
+// Turn an ingredient + how many servings the plan needs into a practical amount.
+const planQty = (name, count) => {
+  const meta = INGREDIENT_META[name];
+  if (!meta) return "";
+  if (meta.kind === "fixed") return meta.fixed;
+  if (meta.kind === "meat") {
+    const lb = Math.max(0.5, Math.ceil(count * 0.4 * 2) / 2); // ~0.4 lb/serving, up to nearest 0.5
+    return `${lb} lb`;
   }
+  if (meta.kind === "vegbag") {
+    const bags = Math.max(1, Math.ceil(count / 3)); // ~3 servings per bag
+    return bags === 1 ? "1 bag" : `${bags} bags`;
+  }
+  if (meta.kind === "count") {
+    return meta.unit ? `${count} ${meta.unit}` : `${count}`;
+  }
+  return "";
 };
 
 const SUNDAY_RESET = [
@@ -717,26 +711,30 @@ function ShoppingList({ shopping, setShopping }) {
   const [newItem, setNewItem] = useState("");
   const checked = shopping.checked || {};
   const custom = shopping.custom || [];
-  const meals = shopping.meals || 8;
 
-  // Staple sections hold objects; append custom items (strings) as a normalized Extras section.
+  // Build the list from the week's meal plan: each ingredient appears once, sized
+  // to how many of the 8 weekly meals actually use it.
+  const needs = useMemo(() => planNeeds(), []);
+  const planSections = useMemo(() => {
+    const map = {};
+    SECTION_ORDER.forEach(s => { map[s] = []; });
+    Object.keys(INGREDIENT_META).forEach(name => {
+      const count = needs[name] || 0;
+      if (count <= 0) return;
+      const meta = INGREDIENT_META[name];
+      map[meta.section].push({ name, qty: planQty(name, count) });
+    });
+    ALWAYS_ITEMS.forEach(it => { map[it.section].push({ name: it.name, qty: it.qty }); });
+    return SECTION_ORDER.map(s => ({ section: s, items: map[s] })).filter(sec => sec.items.length > 0);
+  }, [needs]);
+
   const sections = custom.length
-    ? [...SHOPPING_STAPLES, { section: "Extras", isCustom: true, items: custom.map(c => ({ name: c })) }]
-    : SHOPPING_STAPLES;
+    ? [...planSections, { section: "Extras", isCustom: true, items: custom.map(c => ({ name: c })) }]
+    : planSections;
 
   const allNames = sections.flatMap(s => s.items.map(it => it.name));
   const totalChecked = allNames.filter(n => checked[n]).length;
   const remaining = allNames.length - totalChecked;
-
-  const setMeals = (val) => {
-    // Snap to the nearest even number (2 meals/day) and clamp to range.
-    const clamped = Math.max(2, Math.min(24, Math.round(val / 2) * 2));
-    setShopping(prev => {
-      const updated = { ...prev, meals: clamped };
-      saveData("shopping", updated);
-      return updated;
-    });
-  };
 
   const toggleItem = (name) => {
     setShopping(prev => {
@@ -795,24 +793,16 @@ function ShoppingList({ shopping, setShopping }) {
 
       {open && (
         <div style={{ marginTop: 16 }}>
-          {/* Meals prepping control */}
+          {/* Plan summary — the list is built from the week's 8 meals */}
           <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
+            display: "flex", alignItems: "center", gap: 10,
             padding: "12px 14px", borderRadius: 10, marginBottom: 16,
             background: "rgba(220,38,38,0.05)", border: "1px solid rgba(220,38,38,0.12)",
           }}>
+            <Icon name="utensils" size={16} color="#dc2626" />
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Meals prepping</div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 1 }}>Amounts scale to this</div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <button onClick={() => setMeals(meals - 2)} style={{ ...styles.smallBtn, width: 34, height: 34, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
-                <Icon name="minus" size={14} stroke={2.5} />
-              </button>
-              <span style={{ fontSize: 22, fontWeight: 800, color: "#dc2626", minWidth: 34, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{meals}</span>
-              <button onClick={() => setMeals(meals + 2)} style={{ ...styles.smallBtn, width: 34, height: 34, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
-                <Icon name="plus" size={14} stroke={2.5} />
-              </button>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Enough for this week</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 1 }}>8 meals · Mon–Thu · 2 a day</div>
             </div>
           </div>
 
@@ -836,7 +826,7 @@ function ShoppingList({ shopping, setShopping }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {sec.items.map((item, ii) => {
                   const isChecked = !!checked[item.name];
-                  const qty = sec.isCustom ? null : qtyFor(item, meals);
+                  const qty = sec.isCustom ? null : item.qty;
                   return (
                     <div key={ii} style={{
                       display: "flex", alignItems: "center", gap: 10,
@@ -914,7 +904,7 @@ function ShoppingList({ shopping, setShopping }) {
           </div>
 
           <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 12, textAlign: "center" }}>
-            Amounts are estimates — adjust "meals prepping" to fit your week. Checkmarks reset each Sunday; your added items stay.
+            Amounts cover your 8 meals for the week. Checkmarks reset each Sunday; your added items stay.
           </div>
         </div>
       )}
@@ -1501,27 +1491,13 @@ export default function IronProtocol() {
     saveData("mealMode", mode);
   };
 
-  // On mount: reset the shopping checkmarks if it's a new week, and make sure the
-  // meal count is an even number in range (older saved values may be odd, e.g. 15).
+  // On mount: reset the shopping checkmarks if it's a new week (custom items are kept).
   useEffect(() => {
     const currentWeek = getWeekKey();
-    let next = shopping;
-    let changed = false;
-
     if (shopping.weekKey !== currentWeek) {
-      next = { weekKey: currentWeek, checked: {}, custom: shopping.custom || [], meals: shopping.meals || 8 };
-      changed = true;
-    }
-
-    const evenMeals = Math.max(2, Math.min(24, Math.round((next.meals || 8) / 2) * 2));
-    if (evenMeals !== next.meals) {
-      next = { ...next, meals: evenMeals };
-      changed = true;
-    }
-
-    if (changed) {
-      setShopping(next);
-      saveData("shopping", next);
+      const reset = { weekKey: currentWeek, checked: {}, custom: shopping.custom || [] };
+      setShopping(reset);
+      saveData("shopping", reset);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
